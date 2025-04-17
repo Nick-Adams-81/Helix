@@ -1,7 +1,9 @@
 from flask import Flask, jsonify, request, session
 from flask_sqlalchemy import SQLAlchemy
 import os
+from datetime import timedelta
 from models.user import User, db
+from chat_bot.chat_bot import chat_with_bot
 
 app = Flask(__name__)
 
@@ -9,6 +11,9 @@ app = Flask(__name__)
 app.config["SQLALCHEMY_DATABASE_URI"] = 'sqlite:///users.db'
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 app.config["SECRET_KEY"] = os.urandom(24)
+# Set session to be permanent and last for 7 days
+app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(days=2)
+app.config["SESSION_PERMANENT"] = True
 
 db.init_app(app)
 
@@ -17,12 +22,16 @@ with app.app_context():
 
 def login_required(f):
     def decorated_function(*args, **kwargs):
+        print(f"Checking session: {session}")
         if "user_id" not in session:
-            return jsonify({"error": " Please log in to access this resource."})
+            print("No user_id in session")
+            return jsonify({"error": "Please log in to access this resource."}), 401
         user = User.query.get(session["user_id"])
         if not user:
+            print(f"User not found for session user_id: {session['user_id']}")
             session.pop("user_id", None)
-            return jsonify({"error": "User not found. Please login again"})
+            return jsonify({"error": "User not found. Please login again"}), 401
+        print(f"User authenticated: {user.username}")
         return f(*args, **kwargs)
     decorated_function.__name__ = f.__name__
     return decorated_function
@@ -85,6 +94,42 @@ def get_user(user_id):
     user = User.query.get_or_404(user_id)
     return jsonify(user.to_dict())
 
+@app.route("/ping", methods=["GET"])
+def ping():
+    print("Ping received")
+    return jsonify({"message": "pong"}), 200
+
+# Route to chat with the AI bot
+@app.route("/chat", methods=["POST"])
+@login_required
+def chat():
+    print(f"Session state in chat route: {session}")
+    if "user_id" in session:
+        print(f"User is logged in, ID: {session['user_id']}")
+    else:
+        print("No user logged in")
+    data = request.get_json()
+    print(f"Received data: {data}")
+    if not data or "message" not in data:
+        return jsonify({"error": "Missing 'message' in request"}), 400
+    user_input = data["message"]
+    print(f"Processing message: {user_input}")
+    response_text = chat_with_bot(user_input)
+    print(f"response: {response_text}")
+    
+    # Clean up the response if it contains agent thoughts
+    if isinstance(response_text, str):
+        if "Thought:" in response_text:
+            response_text = response_text.split("Final Answer:")[-1].strip()
+        elif "Final Answer:" in response_text:
+            response_text = response_text.split("Final Answer:")[-1].strip()
+    
+    if response_text:
+        return jsonify({"response": response_text}), 200
+    else:
+        return jsonify({"error": "Empty response from bot"}), 500
+
+
 
 if __name__ == "__main__":
-    app.run(debug=True, port=4000)
+    app.run(debug=True, port=4000, host="0.0.0.0")
