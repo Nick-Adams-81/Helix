@@ -7,13 +7,14 @@ from chat_bot.chat_bot import chat_with_bot
 
 app = Flask(__name__)
 
+# Configure session
+app.config['SECRET_KEY'] = os.urandom(24)
+app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=7)  # Set session lifetime to 7 days
+app.config['SESSION_PERMANENT'] = True
+
 # Configure SQLite database
 app.config["SQLALCHEMY_DATABASE_URI"] = 'sqlite:///users.db'
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
-app.config["SECRET_KEY"] = os.urandom(24)
-# Set session to be permanent and last for 7 days
-app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(days=2)
-app.config["SESSION_PERMANENT"] = True
 
 db.init_app(app)
 
@@ -103,33 +104,16 @@ def ping():
 @app.route("/chat", methods=["POST"])
 @login_required
 def chat():
-    print(f"Session state in chat route: {session}")
-    if "user_id" in session:
-        print(f"User is logged in, ID: {session['user_id']}")
-    else:
-        print("No user logged in")
     data = request.get_json()
-    print(f"Received data: {data}")
-    if not data or "message" not in data:
-        return jsonify({"error": "Missing 'message' in request"}), 400
-    user_input = data["message"]
-    print(f"Processing message: {user_input}")
-    response_text = chat_with_bot(user_input)
-    print(f"response: {response_text}")
+    if "message" not in data:
+        return jsonify({"error": "Message is required"}), 400
     
-    # Clean up the response if it contains agent thoughts
-    if isinstance(response_text, str):
-        if "Thought:" in response_text:
-            response_text = response_text.split("Final Answer:")[-1].strip()
-        elif "Final Answer:" in response_text:
-            response_text = response_text.split("Final Answer:")[-1].strip()
-    
-    if response_text:
-        return jsonify({"response": response_text}), 200
-    else:
-        return jsonify({"error": "Empty response from bot"}), 500
-
-
+    try:
+        response = chat_with_bot(data["message"])
+        return jsonify({"response": response})
+    except Exception as e:
+        print(f"Error in chat endpoint: {str(e)}")
+        return jsonify({"error": "Failed to process chat message"}), 500
 
 if __name__ == "__main__":
     app.run(debug=True, port=4000, host="0.0.0.0")

@@ -66,18 +66,24 @@ If you are unable to answer, just say you don't know.
 memory.chat_memory.add_message(SystemMessage(content=initial_system_message))
 
 def chat_with_bot(user_input: str):
+    print(f"Chat bot received input: {user_input}")
+    
     # Add the user's message to the conversation memory
     memory.chat_memory.add_message(HumanMessage(content=user_input))
 
     try:
+        print("Getting response from agent...")
         # Get the response from the agent
         response = agent_executor.invoke({"input": user_input})
+        print(f"Raw agent response: {response}")
         
         # Extract the final response from the agent's output
         if isinstance(response, dict):
             response_text = response.get("output", "")
         else:
             response_text = str(response)
+            
+        print(f"Extracted response text: {response_text}")
             
         # Clean up the response to remove any agent thoughts or internal processing
         if "Thought:" in response_text:
@@ -86,8 +92,10 @@ def chat_with_bot(user_input: str):
             response_text = response_text.split("Final Answer:")[-1].strip()
             
         if not response_text:
+            print("No response text generated")
             return "Sorry, I couldn't generate a response."
             
+        print(f"Final cleaned response: {response_text}")
         # Add the AI's response to the conversation memory
         memory.chat_memory.add_message(AIMessage(content=response_text))
         return response_text

@@ -24,4 +24,5 @@ class User(db.Model):
             'username': self.username,
             'email': self.email,
             'created_at': self.created_at.isoformat()
-        } 
+        }
+
