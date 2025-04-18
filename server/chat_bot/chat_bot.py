@@ -62,9 +62,9 @@ tools = [
         description="Useful when you need to find information on any topic."
     ),
     Tool(
-        name="wikipediaTool",
+        name="WikipediaTool",
         func=wikipedia_tool,
-        description="Useful for when you need to know information about a topic."
+        description="Useful when you need to get information on a topic."
     )
 ]
 
@@ -72,7 +72,7 @@ tools = [
 prompt = hub.pull("hwchase17/structured-chat-agent")
 
 # Create out ChatOpenAI model
-llm = ChatOpenAI(model="gpt-3.5-turbo", temperature=0.3)
+llm = ChatOpenAI(model="gpt-3.5-turbo", temperature=0.5)
 
 # Create a structured chat agent with conversational buffer memory
 memory = ConversationBufferWindowMemory(k=3, memory_key="chat_history", return_messages=True)
@@ -85,7 +85,9 @@ agent_executor = AgentExecutor.from_agent_and_tools(
     tools=tools,
     memory=memory,
     handle_parsing_errors=True,
-    verbose=False
+    verbose=False,
+    max_iterations=5,
+    max_execution_time=15,
 )
 
 # Initial system message to set the context for the chat
