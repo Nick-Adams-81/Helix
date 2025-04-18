@@ -2,7 +2,7 @@ from flask import Flask, jsonify, request, session
 from flask_sqlalchemy import SQLAlchemy
 import os
 from datetime import timedelta
-from models.user import User, db
+from models.user import User, ChatMessage, db
 from chat_bot.chat_bot import chat_with_bot
 
 app = Flask(__name__)
@@ -18,9 +18,12 @@ app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
 db.init_app(app)
 
+# Allows alchemy to create all db tables
 with app.app_context():
     db.create_all()
 
+# Function to ensure only logged in users can access certain routes by decorating the route 
+# with the name of the function
 def login_required(f):
     def decorated_function(*args, **kwargs):
         print(f"Checking session: {session}")
@@ -37,6 +40,7 @@ def login_required(f):
     decorated_function.__name__ = f.__name__
     return decorated_function
 
+# Signup route
 @app.route("/signup", methods=["POST"])
 def signup():
     data = request.get_json()
@@ -61,6 +65,7 @@ def signup():
         "user": user.to_dict()
     }), 201
 
+# Login route
 @app.route("/login", methods=["POST"])
 def login():
     data = request.get_json()
@@ -77,28 +82,26 @@ def login():
         "user": user.to_dict()
     })
 
+# Logout route
 @app.route("/logout", methods=["POST"])
 @login_required
 def logout():
     session.pop("user_id", None)
     return jsonify({"message": "Logged out successfully"})
 
+# Checking to make sure the loggedin user gets their data back
 @app.route("/me", methods=["GET"])
 @login_required
 def get_current_user():
     user = User.query.get(session["user_id"])
     return jsonify(user.to_dict())
 
+# Route to get single user by id
 @app.route("/users/<int:user_id>", methods=["GET"])
 @login_required
 def get_user(user_id):
     user = User.query.get_or_404(user_id)
     return jsonify(user.to_dict())
-
-@app.route("/ping", methods=["GET"])
-def ping():
-    print("Ping received")
-    return jsonify({"message": "pong"}), 200
 
 # Route to chat with the AI bot
 @app.route("/chat", methods=["POST"])
@@ -114,6 +117,36 @@ def chat():
     except Exception as e:
         print(f"Error in chat endpoint: {str(e)}")
         return jsonify({"error": "Failed to process chat message"}), 500
+
+@app.route("/test-chat", methods=["POST"])
+def test_chat():
+    try:
+        new_message = ChatMessage(
+            user_id = session["user_id"],
+            message_text = "This is a test message",
+            is_user_message=True
+        )
+        db.session.add(new_message)
+        db.session.commit()
+
+        messages = ChatMessage.query.filter_by(user_id=session["user_id"]).all()
+
+        return jsonify({
+            "success": True,
+            "message": "Test message created",
+            "messages": [{
+                "id": msg.id,
+                "text": msg.message_text,
+                "is_user": msg.is_user_message,
+                "created_at": msg.created_at.isformat()
+            } for msg in messages]
+        })
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 500
 
 if __name__ == "__main__":
     app.run(debug=True, port=4000, host="0.0.0.0")

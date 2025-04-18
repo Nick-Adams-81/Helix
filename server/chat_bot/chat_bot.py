@@ -1,16 +1,18 @@
 from dotenv import load_dotenv
 from langchain import hub
 from langchain.agents import AgentExecutor, create_structured_chat_agent
-from langchain.memory import ConversationBufferMemory
+from langchain.memory import ConversationBufferWindowMemory
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_core.tools import Tool
 from langchain_openai import ChatOpenAI
+from googleapiclient.discovery import build
+import os
 
 # Load environemt variables
 load_dotenv()
 
 # Wikipedia tool
-def wikipedia_tool(query):
+def wikipedia_tool(query: str):
     # This tool searches wikipedia and returns the summary of the first resukt
     from wikipedia import summary
     try:
@@ -18,8 +20,47 @@ def wikipedia_tool(query):
     except:
         return "I couldn't find any information on that."
 
+def google_search_tool(query: str):
+    # Search google using the custom search API
+    try:
+        # Get variables from env file (api key and search engine id)
+        api_key = os.environ["GOOGLE_SEARCH_API_KEY"]
+        search_engine_id = os.environ["GOOGLE_SEARCH_ENGINE_ID"]
+
+        # Create service with name, version, and develpoer key props
+        service = build("customsearch", "v1", developerKey=api_key)
+
+        # REsult takes in query, engine id, and number of results
+        result = service.cse().list(
+            q=query,
+            cx=search_engine_id,
+            num=1
+        ).execute()
+
+        # Seeing if there are items in results, if so set up empty list 
+        # and append desired formatted results to list
+        if "items" in result:
+            formatted_result = []
+            for item in result["items"]:
+                formatted_result.append(
+                    f"Title: {item['title']}\n"
+                    f"Link: {item['link']}\n"
+                    f"Snippet: {item['snippet']}\n"
+                )
+            return "\n\n".join(formatted_result)
+        else:
+            return "No results found..."
+    except Exception as e:
+        return f"Error performing search: {str(e)}"
+
+
 # List of tools the agent can use
 tools = [
+    Tool(
+        name="GoogleSearchTool",
+        func=google_search_tool,
+        description="Useful when you need to find information on any topic."
+    ),
     Tool(
         name="wikipediaTool",
         func=wikipedia_tool,
@@ -34,7 +75,7 @@ prompt = hub.pull("hwchase17/structured-chat-agent")
 llm = ChatOpenAI(model="gpt-3.5-turbo", temperature=0.3)
 
 # Create a structured chat agent with conversational buffer memory
-memory = ConversationBufferMemory(memory_key="chat_history", return_messages=True)
+memory = ConversationBufferWindowMemory(k=3, memory_key="chat_history", return_messages=True)
 agent = create_structured_chat_agent(llm=llm, tools=tools, prompt=prompt)
 
 # The agent executor is responsible for managing the interaction between the user input,
@@ -44,7 +85,7 @@ agent_executor = AgentExecutor.from_agent_and_tools(
     tools=tools,
     memory=memory,
     handle_parsing_errors=True,
-    verbose=False  # Set verbose to False to suppress intermediate thoughts
+    verbose=False
 )
 
 # Initial system message to set the context for the chat

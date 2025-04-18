@@ -3,6 +3,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from flask_sqlalchemy import SQLAlchemy
 
 
+
 db = SQLAlchemy()
 
 class User(db.Model):
@@ -26,3 +27,13 @@ class User(db.Model):
             'created_at': self.created_at.isoformat()
         }
 
+class ChatMessage(db.Model):
+    __tablename__ = "chat_messages"
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    message_text = db.Column(db.Text, nullable=False)
+    is_user_message = db.Column(db.Boolean, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.now())
+
+    user = db.relationship("User", backref=db.backref("chat_messages", lazy=True))
